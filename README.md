@@ -47,28 +47,26 @@ The comparison focuses on **execution time** and **scalability (strong and weak)
 #### oneAPI/SYCL (CPU)
 
 ```bash
-icpx -O3 -std=c++17 -fsycl src/kmeans_sycl.cpp -o bin/kmeans_oneapi_cpu
+icpx -O3 -std=c++17 -fsycl kmeans-oneapi-CPU -o cpu
+export DPCPP_CPU_NUM_CUS = X
+./cpu
 ```
 
 #### oneAPI/SYCL (GPU)
 
-> NVIDIA GPU via a compatible *backend* (e.g., nvptx):
+> NVIDIA GPU via a compatible *backend*:
 
 ```bash
-icpx -O3 -std=c++17 -fsycl \
-  -fsycl-targets=nvptx64-nvidia-cuda \
-  -Xsycl-target-backend=nvptx64-nvidia-cuda:"--cuda-gpu-arch=sm_86" \
-  src/kmeans_sycl.cpp -o bin/kmeans_oneapi_gpu
-export SYCL_DEVICE_FILTER=gpu
-```
+icpx -O3 -fsycl -fsycl-targets=nvptx64-nvidia-cuda kmeans-oneapi-GPU -o gpu
+./gpu
 
+```
 #### OpenMP (CPU)
 
 ```bash
-# Clang
-clang++ -O3 -std=c++17 -fopenmp src/kmeans_omp_cpu.cpp -o bin/kmeans_omp_cpu
-# or GCC
-g++     -O3 -std=c++17 -fopenmp src/kmeans_omp_cpu.cpp -o bin/kmeans_omp_cpu
+g++  -O3 -std=c++17 -fopenmp kmeans-openmp-CPU -o cpuO
+export OMP_NUM_THREADS = X
+./cpuO
 ```
 
 #### OpenMP Target (GPU)
@@ -76,11 +74,17 @@ g++     -O3 -std=c++17 -fopenmp src/kmeans_omp_cpu.cpp -o bin/kmeans_omp_cpu
 > NVIDIA (Clang):
 
 ```bash
-clang++ -O3 -std=c++17 -fopenmp \
-  -fopenmp-targets=nvptx64-nvidia-cuda \
-  -Xopenmp-target=nvptx64-nvidia-cuda -march=sm_86 \
-  src/kmeans_omp_gpu.cpp -o bin/kmeans_omp_gpu
-export OMP_TARGET_OFFLOAD=MANDATORY
+<LLVM_PATH>/bin/clang++ -O3 -std=c++17 openmpGPU.cpp \
+  -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda \
+  --offload-arch=sm_<MAJOR><MINOR> \
+  --libomptarget-nvptx-bc-path=<LLVM_PATH>/lib \
+  -o gpuO
+
+LD_LIBRARY_PATH=<LLVM_PATH>/lib:$LD_LIBRARY_PATH \
+  OMP_TARGET_OFFLOAD=MANDATORY \
+  LIBOMPTARGET_INFO=30 \
+  ./gpuO
+
 ```
 
 ---
