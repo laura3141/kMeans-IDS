@@ -10,153 +10,138 @@
 using namespace std;
 
 static const int k = 2;
-static const int n_instancias = 4000000;
-static const int n_atributos = 22;
+static const int n_instances = 4000000;
+static const int n_attributes = 22;
 
-size_t N_inst = n_instancias; 
-size_t N_atr = n_atributos;
+size_t N_inst = n_instances; 
+size_t N_attr = n_attributes;
 
-std::vector<int> labels(n_instancias);
+float *instances = new float[N_inst*N_attr];
+int *results = new int[n_instances];
+float *centers = new float[k*N_attr];
 
-float *instancias = new float[N_inst*N_atr];
-int *resultados = new int[n_instancias];
-float *centros = new float[k*N_atr];
-
-
-void cria_instancias(){
-    int c_instancias = 0;
-    string linha, linha2;
-    string aux;
-    std::ifstream arquivo("./preprocessamento/32_dados.csv");
-    getline(arquivo, linha);
-    while (getline(arquivo, linha)  && c_instancias < n_instancias) {
+// Loads instances from CSV file into the 'instances' array
+void load_instances(){
+    int instance_count = 0;
+    string line, aux;
+    std::ifstream file("32_dados.csv");
+    getline(file, line); // Skip header
+    while (getline(file, line)  && instance_count < n_instances) {
         int p = 0;
-        for (int j = 0; j < n_atributos; j++) {
+        for (int j = 0; j < n_attributes; j++) {
             aux = "";
-            while (p < linha.size() && linha[p] != ',') {
-                aux += linha[p];
+            while (p < line.size() && line[p] != ',') {
+                aux += line[p];
                 p++;
             }
             try {
-                instancias[c_instancias * n_atributos + j] = std::stod(aux);
+                instances[instance_count * n_attributes + j] = std::stod(aux);
             } catch (const std::exception& e) {
-                std::cerr << "Erro ao converter: '" << aux << "'. " << e.what() << std::endl;
-                instancias[c_instancias * n_atributos + j] = 0.0f;
+                std::cerr << "Error converting: '" << aux << "'. " << e.what() << std::endl;
+                instances[instance_count * n_attributes + j] = 0.0f;
             }
             p++;
         }
-        c_instancias++;
+        instance_count++;
     }
-    printf("Instâncias carregadas: %d \n",c_instancias);
+    printf("Loaded instances: %d \n",instance_count);
 }
 
-void inicializa_centros(){
+// Initializes cluster centers randomly from the loaded instances
+void initialize_centers(){
     srand(3);
     for (int i = 0; i < k; i++) {
-        int indicie = rand()%n_instancias;
-        for (int j = 0;j < n_atributos;j++){
-            centros[i*n_atributos+j] = instancias[indicie*n_atributos+j];
+        int index = rand()%n_instances;
+        for (int j = 0;j < n_attributes;j++){
+            centers[i*n_attributes+j] = instances[index*n_attributes+j];
         }
     }
 }
 
-void conta_instancias(int* c){
+// Counts the number of instances assigned to each cluster
+void count_instances(int* c){
     for(int i=0;i<k;i++){
         c[i]=0;
     }
-    for(int i=0;i<n_instancias;i++){
-        c[resultados[i]]++;
+    for(int i=0;i<n_instances;i++){
+        c[results[i]]++;
     }
 }
 
-void atribui_cluster(){
-    size_t Nia = N_inst*N_atr;
-    size_t NaSete = k*N_atr;
-    #pragma omp target data map(to: instancias[0:Nia], centros[0:NaSete]) map(tofrom: resultados[0:n_instancias])
+// Assigns each instance to the nearest cluster center (parallelized for GPU)
+void assign_cluster(){
+    size_t Nia = N_inst*N_attr;
+    size_t NaSete = k*N_attr;
+    #pragma omp target data map(to: instances[0:Nia], centers[0:NaSete]) map(tofrom: results[0:n_instances])
     {
         #pragma omp target teams distribute parallel for
-        for (int i = 0; i < n_instancias; i++){
-            float menor = INFINITY;
-            float distancia;
+        for (int i = 0; i < n_instances; i++){
+            float min_dist = INFINITY;
+            float distance;
             for(int j = 0; j < k;j++){
-                float soma = 0;
-                for(int n = 0; n<n_atributos;n++){
-                    float diff = instancias[i*n_atributos+n] - centros[j*n_atributos+n];
-                    soma += diff * diff;
+                float sum = 0;
+                for(int n = 0; n<n_attributes;n++){
+                    float diff = instances[i*n_attributes+n] - centers[j*n_attributes+n];
+                    sum += diff * diff;
                 }
-                distancia = soma;
-                if(distancia < menor){    
-                    menor = distancia;
-                    resultados[i]=j;
+                distance = sum;
+                if(distance < min_dist){    
+                    min_dist = distance;
+                    results[i]=j;
                 }
             }
         }
     }
 }
 
-void atualiza_centros(int* c) {
-    conta_instancias(c);
-    float soma[k][n_atributos];
+// Updates cluster centers based on assigned instances
+void update_centers(int* c) {
+    count_instances(c);
+    float sum[k][n_attributes];
     for(int i = 0; i < k; i++) {
-        for(int j = 0; j < n_atributos; j++) {
-            soma[i][j] = 0.0f;
+        for(int j = 0; j < n_attributes; j++) {
+            sum[i][j] = 0.0f;
         }
     }
-    for(int i=0;i<n_instancias;i++){
-        for(int j=0;j<n_atributos;j++){
-            soma[resultados[i]][j]+=instancias[i*n_atributos+j];
+    for(int i=0;i<n_instances;i++){
+        for(int j=0;j<n_attributes;j++){
+            sum[results[i]][j]+=instances[i*n_attributes+j];
         }
     }
-    #pragma omp target teams distribute map(to: c[0:k]) map(tofrom: soma[0:k][0:n_atributos])
+    #pragma omp target teams distribute map(to: c[0:k]) map(tofrom: sum[0:k][0:n_attributes])
     for(int i = 0; i < k; i++) {
         #pragma omp parallel for
-        for(int j = 0; j < n_atributos; j++) {
+        for(int j = 0; j < n_attributes; j++) {
             if (c[i] != 0) {
-                soma[i][j] = soma[i][j] / c[i];
+                sum[i][j] = sum[i][j] / c[i];
             }
         }
     }
     for(int i = 0; i < k; i++) {
-        for(int j = 0; j < n_atributos; j++) {
-            centros[i * n_atributos + j] = soma[i][j];
+        for(int j = 0; j < n_attributes; j++) {
+            centers[i * n_attributes + j] = sum[i][j];
         }
     }
 }
 
-int avaliar_por_permutacao() {
-    vector<int> perm(k);
-    iota(perm.begin(), perm.end(), 0);
-    int max_acertos = 0;
-    do {
-        int acertos = 0;
-        for (int i = 0; i < n_instancias; ++i) {
-            int rotulo_predito = perm[resultados[i]];
-            if (rotulo_predito == labels[i])
-                acertos++;
-        }
-        if (acertos > max_acertos)
-            max_acertos = acertos;
-    } while (next_permutation(perm.begin(), perm.end()));
-    return max_acertos; 
-}
-
+// Main k-means loop: loads data, initializes centers, assigns clusters, updates centers
 void kmeans(){
     int c[k];
-    cria_instancias();
-    inicializa_centros();
+    load_instances();
+    initialize_centers();
     for(int i=0;i<30;i++){
-        atribui_cluster(); 
-        atualiza_centros(c); 
+        assign_cluster(); 
+        update_centers(c); 
     }
 }
 
 int main (){
     kmeans();
-    for (int i = 0; i < n_instancias; ++i) {
-        cout << "Instância " << i << " atribuída ao cluster " << resultados[i] << endl;
+    for (int i = 0; i < n_instances; ++i) {
+        cout << results[i] << std::endl;
     }
-    delete[] instancias;
-    delete[] resultados;
-    delete[] centros;
+    delete[] instances;
+    delete[] results;
+    delete[] centers;
     return 0;
 }
