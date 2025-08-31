@@ -1,7 +1,8 @@
 # K-Means: Comparison between oneAPI (CPU/GPU) and OpenMP (CPU/GPU)
 
-> Undergraduate Research Project – performance and clustering quality evaluation of *K-Means* on CPU and GPU using OpenMP and oneAPI
-> **Advisor:** Henrique Cota de Freitas
+> Undergraduate Research Project – performance evaluation of *K-Means* on CPU and GPU using OpenMP and oneAPI
+
+**Advisor:** Henrique Cota de Freitas
 
 ---
 
@@ -88,8 +89,8 @@ export OMP_TARGET_OFFLOAD=MANDATORY
 
 * **oneAPI GPU** tends to outperform **oneAPI CPU** on large problems (higher parallelism and *throughput*), as long as data transfer doesn’t dominate.
 * **OpenMP CPU** provides a good *baseline* and is easy to port.
-* **OpenMP Target GPU** can approach SYCL performance on GPU, depending on *backend* maturity and tuning (team/thread sizes, affinity, vector length).
-* Significant gains appear in scenarios with **large n** and **moderate/high k**.
+* **OpenMP Target GPU** can approach SYCL performance on GPU, depending on *backend* maturity.
+* Significant gains appear in scenarios with **large number of instances** and **moderate/high k**.
 
 > Interpret *speedups* considering allocation/copy *overheads*, memory access patterns (coalescing), and parallelization policies in each variant.
 
